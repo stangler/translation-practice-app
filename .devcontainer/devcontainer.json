@@ -1,0 +1,8 @@
+{
+  "name": "Translation Practice App",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "postCreateCommand": "pnpm install",
+  "remoteUser": "node"
+}

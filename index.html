@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>英語練習テスト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="json/words-data.js"></script>
+<style>
+/* ===== リセット・基本 ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f7f1e4;
+  --text: #2f3b52;
+  --red: #d6473c;
+  --red-light: #f5e8e7;
+  --card-bg: #fffdf8;
+  --border: #d4c9b0;
+  --shadow: rgba(47,59,82,0.10);
+  --blue: #5c7a99;
+  --green: #6f8f6a;
+  --gold: #c99a3b;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Zen Maru Gothic', sans-serif;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 0;
+}
+
+/* ===== ノートデザイン共通 ===== */
+.note-page {
+  max-width: 680px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--card-bg);
+  border-left: 4px solid var(--red);
+  box-shadow: 2px 0 16px var(--shadow);
+  padding: 32px 36px 48px 52px;
+  position: relative;
+}
+
+/* リング穴装飾 */
+.note-page::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 48px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  box-shadow: 0 120px 0 0 var(--bg), 0 120px 0 0 var(--border),
+              0 240px 0 0 var(--bg), 0 240px 0 0 var(--border),
+              0 360px 0 0 var(--bg), 0 360px 0 0 var(--border),
+              0 480px 0 0 var(--bg), 0 480px 0 0 var(--border);
+  border-radius: 50%;
+}
+
+/* ===== 画面管理 ===== */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ===== 開始画面 ===== */
+.app-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+.app-subtitle {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 28px;
+}
+
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  margin-top: 22px;
+}
+
+/* モード選択 */
+.mode-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.mode-btn {
+  padding: 16px 10px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: center;
+  transition: all 0.15s;
+  line-height: 1.5;
+}
+.mode-btn .mode-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+.mode-btn:hover { border-color: var(--blue); background: #f0f5fa; }
+.mode-btn.selected { border-color: var(--blue); background: #e8f0f7; color: var(--blue); font-weight: 700; }
+
+/* レッスン選択 */
+.lesson-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.lesson-btn {
+  padding: 8px 18px;
+  border: 2px solid var(--border);
+  border-radius: 20px;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.lesson-btn:hover { border-color: var(--blue); }
+.lesson-btn.selected {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+/* パート選択 */
+.part-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.part-btn {
+  padding: 6px 14px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.part-btn:hover { border-color: var(--green); }
+.part-btn.selected {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+/* オプション行 */
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  margin-bottom: 24px;
+}
+.toggle-label {
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.toggle-label input[type=checkbox] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--red);
+  cursor: pointer;
+}
+
+/* 開始ボタン */
+.start-btn {
+  width: 100%;
+  padding: 15px;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.05em;
+}
+.start-btn:hover { background: #b83a30; }
+.start-btn:active { transform: scale(0.98); }
+.start-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+/* ===== テスト画面 ===== */
+.quiz-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.quiz-progress {
+  font-size: 13px;
+  color: #888;
+}
+.quiz-mode-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+  letter-spacing: 0.05em;
+}
+.progress-bar-wrap {
+  width: 100%;
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--red);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+/* 問題カード */
+.question-card {
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 24px 20px;
+  margin-bottom: 20px;
+  position: relative;
+}
+.question-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #aaa;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+.question-text {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--text);
+}
+.question-text.en-text {
+  font-family: var(--mono);
+  font-size: 18px;
+}
+
+/* 採点マーク（SVGアニメ） */
+.mark-container {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  width: 56px;
+  height: 56px;
+}
+.mark-container svg { width: 100%; height: 100%; }
+
+/* 回答エリア */
+.answer-area { margin-bottom: 16px; }
+.answer-input {
+  width: 100%;
+  padding: 13px 16px;
+  font-family: var(--sans);
+  font-size: 16px;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.15s;
+  line-height: 1.5;
+}
+.answer-input.en-input {
+  font-family: var(--mono);
+}
+.answer-input:focus { border-color: var(--blue); }
+.answer-input.correct { border-color: var(--green); background: #f0f7ef; }
+.answer-input.wrong { border-color: var(--red); background: var(--red-light); }
+
+/* フィードバック */
+.feedback {
+  display: none;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.feedback.show { display: block; }
+.feedback-correct-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.feedback-answer {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 600;
+}
+.feedback-answer.ja-text {
+  font-family: var(--sans);
+}
+.feedback-all-answers {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* 判定ボタン・次へボタン */
+.action-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.check-btn {
+  flex: 1;
+  padding: 13px;
+  background: var(--text);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.check-btn:hover { background: #1a2535; }
+.next-btn {
+  flex: 1;
+  padding: 13px;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: none;
+  transition: background 0.15s;
+}
+.next-btn:hover { background: #b83a30; }
+.next-btn.show { display: block; }
+
+/* ===== 結果画面 ===== */
+.result-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.result-score {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--red);
+  line-height: 1;
+  margin: 16px 0 6px;
+}
+.result-score-label { font-size: 14px; color: #888; margin-bottom: 12px; }
+.result-message {
+  font-size: 16px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-radius: 10px;
+  border-left: 4px solid var(--gold);
+  margin-bottom: 24px;
+  line-height: 1.7;
+}
+.mistakes-section { margin-bottom: 24px; }
+.mistakes-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+.mistake-item {
+  padding: 12px 14px;
+  background: var(--bg);
+  border-left: 3px solid var(--red);
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.mistake-q { color: #888; margin-bottom: 2px; }
+.mistake-your { color: var(--red); font-size: 12px; }
+.mistake-correct { color: var(--green); font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.mistake-correct.ja-text { font-family: var(--sans); }
+
+.result-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.result-btn {
+  padding: 14px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--card-bg);
+  color: var(--text);
+}
+.result-btn:hover { border-color: var(--text); }
+.result-btn.primary {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+}
+.result-btn.primary:hover { background: #b83a30; }
+
+/* ===== SVGアニメーション ===== */
+@keyframes drawCircle {
+  from { stroke-dashoffset: 160; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes drawCross1 {
+  from { stroke-dashoffset: 60; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes drawCross2 {
+  from { stroke-dashoffset: 60; }
+  to   { stroke-dashoffset: 0; }
+}
+.circle-path {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 160;
+  stroke-dashoffset: 160;
+  animation: drawCircle 0.5s ease forwards;
+}
+.cross-path1, .cross-path2 {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+}
+.cross-path1 { animation: drawCross1 0.3s ease 0s forwards; }
+.cross-path2 { animation: drawCross2 0.3s ease 0.25s forwards; }
+
+/* ===== ユーティリティ ===== */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ======== 開始画面 ======== -->
+<div id="screen-start" class="screen active">
+  <div class="note-page">
+    <div class="app-title">📖 英語練習テスト</div>
+    <div class="app-subtitle">EIGO NO PARTNER</div>
+
+    <div class="section-label">モードを選ぶ</div>
+    <div class="mode-buttons">
+      <button class="mode-btn selected" data-mode="en2ja" onclick="selectMode('en2ja', this)">
+        <span class="mode-icon">🇬🇧→🇯🇵</span>
+        英→日<br><small style="font-size:11px;font-weight:400">英語を見て日本語で答える</small>
+      </button>
+      <button class="mode-btn" data-mode="ja2en" onclick="selectMode('ja2en', this)">
+        <span class="mode-icon">🇯🇵→🇬🇧</span>
+        日→英<br><small style="font-size:11px;font-weight:400">日本語を見て英語で答える</small>
+      </button>
+    </div>
+
+    <div class="section-label">レッスンを選ぶ</div>
+    <div class="lesson-grid" id="lesson-grid"></div>
+
+    <div id="part-section" class="hidden">
+      <div class="section-label">パートを選ぶ</div>
+      <div class="part-row" id="part-row"></div>
+    </div>
+
+    <div class="option-row">
+      <label class="toggle-label">
+        <input type="checkbox" id="shuffle-check" checked>
+        シャッフルする
+      </label>
+    </div>
+
+    <button class="start-btn" id="start-btn" onclick="startQuiz()" disabled>開始</button>
+  </div>
+</div>
+
+<!-- ======== テスト画面 ======== -->
+<div id="screen-quiz" class="screen">
+  <div class="note-page">
+    <div class="quiz-header">
+      <div class="quiz-progress" id="quiz-progress">1 / 10</div>
+      <div class="quiz-mode-badge" id="mode-badge">英→日</div>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+
+    <div class="question-card">
+      <div class="question-label" id="question-label">問題</div>
+      <div class="question-text" id="question-text"></div>
+      <div class="mark-container" id="mark-container"></div>
+    </div>
+
+    <div class="answer-area">
+      <input type="text"
+             class="answer-input"
+             id="answer-input"
+             placeholder="ここに入力…"
+             autocomplete="off"
+             autocorrect="off"
+             autocapitalize="off"
+             spellcheck="false"
+             onkeydown="handleKey(event)">
+    </div>
+
+    <div class="feedback" id="feedback">
+      <div class="feedback-correct-label">✏️ 正解</div>
+      <div class="feedback-answer" id="feedback-answer"></div>
+      <div class="feedback-all-answers" id="feedback-all-answers"></div>
+    </div>
+
+    <div class="action-row">
+      <button class="check-btn" id="check-btn" onclick="checkAnswer()">判定</button>
+      <button class="next-btn" id="next-btn" onclick="nextQuestion()">次へ →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 結果画面 ======== -->
+<div id="screen-result" class="screen">
+  <div class="note-page">
+    <div class="result-title">テスト結果</div>
+    <div class="result-score" id="result-score">0%</div>
+    <div class="result-score-label" id="result-score-label">0 / 0 問正解</div>
+    <div class="result-message" id="result-message"></div>
+
+    <div class="mistakes-section" id="mistakes-section"></div>
+
+    <div class="result-btns">
+      <button class="result-btn primary" id="retry-mistakes-btn" onclick="retryMistakes()">間違いのみ再挑戦</button>
+      <button class="result-btn" onclick="retryAll()">全部再挑戦</button>
+      <button class="result-btn" onclick="goToStart()">選択に戻る</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 状態管理 =====
+let state = {
+  mode: 'en2ja',
+  selectedLesson: null,
+  selectedPart: null,
+  queue: [],
+  currentIndex: 0,
+  results: [],   // {item, correct, userAnswer}
+  isAnswered: false,
+};
+
+// ===== 選択画面 =====
+function buildLessonGrid() {
+  const lessons = [...new Set(wordsData.map(d => d.lesson))];
+  const grid = document.getElementById('lesson-grid');
+  grid.innerHTML = '';
+  lessons.forEach(l => {
+    const btn = document.createElement('button');
+    btn.className = 'lesson-btn';
+    btn.textContent = l === 'Starter' ? 'Starter' : `Lesson ${l}`;
+    btn.onclick = () => selectLesson(l, btn);
+    grid.appendChild(btn);
+  });
+}
+
+function selectMode(mode, btn) {
+  state.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('mode-badge').textContent = mode === 'en2ja' ? '英→日' : '日→英';
+}
+
+function selectLesson(lesson, btn) {
+  state.selectedLesson = lesson;
+  state.selectedPart = null;
+  document.querySelectorAll('.lesson-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  buildPartRow(lesson);
+  updateStartBtn();
+}
+
+function buildPartRow(lesson) {
+  const parts = [...new Set(
+    wordsData.filter(d => d.lesson === lesson).map(d => d.part)
+  )].filter(p => p !== '');
+
+  const section = document.getElementById('part-section');
+  const row = document.getElementById('part-row');
+  row.innerHTML = '';
+
+  if (parts.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+
+  // 「すべて」ボタン
+  const allBtn = document.createElement('button');
+  allBtn.className = 'part-btn selected';
+  allBtn.textContent = 'すべて';
+  allBtn.onclick = () => { state.selectedPart = 'all'; setPartSelected(allBtn); updateStartBtn(); };
+  row.appendChild(allBtn);
+  state.selectedPart = 'all';
+
+  parts.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'part-btn';
+    btn.textContent = `Part ${p}`;
+    btn.onclick = () => { state.selectedPart = p; setPartSelected(btn); updateStartBtn(); };
+    row.appendChild(btn);
+  });
+}
+
+function setPartSelected(btn) {
+  document.querySelectorAll('.part-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function updateStartBtn() {
+  document.getElementById('start-btn').disabled = (state.selectedLesson === null);
+}
+
+// ===== クイズ開始 =====
+function startQuiz() {
+  let items = wordsData.filter(d => d.lesson === state.selectedLesson);
+  if (state.selectedPart && state.selectedPart !== 'all') {
+    items = items.filter(d => d.part === state.selectedPart);
+  }
+
+  if (document.getElementById('shuffle-check').checked) {
+    items = shuffle(items);
+  }
+
+  state.queue = items;
+  state.currentIndex = 0;
+  state.results = [];
+  state.isAnswered = false;
+
+  showScreen('screen-quiz');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const item = state.queue[state.currentIndex];
+  const total = state.queue.length;
+  const idx = state.currentIndex;
+  const mode = state.mode;
+
+  // プログレス
+  document.getElementById('quiz-progress').textContent = `${idx + 1} / ${total}`;
+  document.getElementById('progress-bar').style.width = `${(idx / total) * 100}%`;
+
+  // 問題文
+  const questionText = document.getElementById('question-text');
+  const questionLabel = document.getElementById('question-label');
+  const answerInput = document.getElementById('answer-input');
+
+  if (mode === 'en2ja') {
+    questionLabel.textContent = '英語';
+    questionText.textContent = item.en;
+    questionText.className = 'question-text en-text';
+    answerInput.placeholder = '日本語で答えてください…';
+    answerInput.className = 'answer-input';
+    answerInput.lang = 'ja';
+  } else {
+    questionLabel.textContent = '日本語';
+    questionText.textContent = item.ja;
+    questionText.className = 'question-text';
+    answerInput.placeholder = 'Type in English…';
+    answerInput.className = 'answer-input en-input';
+    answerInput.lang = 'en';
+  }
+
+  // リセット
+  answerInput.value = '';
+  answerInput.readOnly = false;
+  answerInput.className = answerInput.className.replace(' correct', '').replace(' wrong', '');
+  document.getElementById('feedback').classList.remove('show');
+  document.getElementById('mark-container').innerHTML = '';
+  document.getElementById('check-btn').style.display = 'block';
+  document.getElementById('next-btn').classList.remove('show');
+
+  state.isAnswered = false;
+  setTimeout(() => answerInput.focus(), 50);
+}
+
+// ===== 判定 =====
+function checkAnswer() {
+  if (state.isAnswered) return;
+
+  const item = state.queue[state.currentIndex];
+  const input = document.getElementById('answer-input');
+  const userRaw = input.value.trim();
+  const mode = state.mode;
+
+  let correct = false;
+
+  if (mode === 'en2ja') {
+    // 英→日：NFKC正規化後、複数正解候補と比較
+    const userNorm = normalize(userRaw);
+    correct = item.ja_answers.some(ans => normalize(ans) === userNorm);
+  } else {
+    // 日→英：NFKC・小文字化・アポストロフィ正規化
+    const userNorm = normalizeEn(userRaw);
+    const ansNorm = normalizeEn(item.en);
+    correct = userNorm === ansNorm;
+  }
+
+  state.isAnswered = true;
+  state.results.push({ item, correct, userAnswer: userRaw });
+
+  // 入力欄スタイル
+  input.readOnly = true;
+  input.classList.add(correct ? 'correct' : 'wrong');
+
+  // マークアニメ
+  showMark(correct);
+
+  // フィードバック
+  showFeedback(item, mode, correct);
+
+  // ボタン切替
+  document.getElementById('check-btn').style.display = 'none';
+  document.getElementById('next-btn').classList.add('show');
+
+  // 最終問題なら「結果を見る」
+  if (state.currentIndex === state.queue.length - 1) {
+    document.getElementById('next-btn').textContent = '結果を見る';
+  } else {
+    document.getElementById('next-btn').textContent = '次へ →';
+  }
+}
+
+function showFeedback(item, mode, correct) {
+  const fb = document.getElementById('feedback');
+  const fbAns = document.getElementById('feedback-answer');
+  const fbAll = document.getElementById('feedback-all-answers');
+
+  if (mode === 'en2ja') {
+    // 正解は日本語
+    fbAns.textContent = item.ja_answers[0];
+    fbAns.className = 'feedback-answer ja-text';
+    if (item.ja_answers.length > 1) {
+      fbAll.textContent = `別解: ${item.ja_answers.slice(1).join(' / ')}`;
+    } else {
+      fbAll.textContent = '';
+    }
+  } else {
+    // 正解は英語
+    fbAns.textContent = item.en;
+    fbAns.className = 'feedback-answer';
+    fbAll.textContent = '';
+  }
+
+  fb.classList.add('show');
+}
+
+function showMark(correct) {
+  const container = document.getElementById('mark-container');
+  if (correct) {
+    container.innerHTML = `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="28" cy="28" r="22" class="circle-path"/>
+    </svg>`;
+  } else {
+    container.innerHTML = `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <line x1="12" y1="12" x2="44" y2="44" class="cross-path1"/>
+      <line x1="44" y1="12" x2="12" y2="44" class="cross-path2"/>
+    </svg>`;
+  }
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter') {
+    if (!state.isAnswered) {
+      checkAnswer();
+    } else {
+      nextQuestion();
+    }
+  }
+}
+
+function nextQuestion() {
+  if (state.currentIndex === state.queue.length - 1) {
+    showResult();
+    return;
+  }
+  state.currentIndex++;
+  renderQuestion();
+}
+
+// ===== 結果画面 =====
+function showResult() {
+  showScreen('screen-result');
+
+  const total = state.results.length;
+  const correct = state.results.filter(r => r.correct).length;
+  const pct = Math.round((correct / total) * 100);
+
+  document.getElementById('result-score').textContent = `${pct}%`;
+  document.getElementById('result-score-label').textContent = `${correct} / ${total} 問正解`;
+  document.getElementById('result-message').textContent = getMessage(pct);
+
+  const mistakes = state.results.filter(r => !r.correct);
+  const retryBtn = document.getElementById('retry-mistakes-btn');
+  retryBtn.style.display = mistakes.length > 0 ? 'block' : 'none';
+
+  const section = document.getElementById('mistakes-section');
+  if (mistakes.length === 0) {
+    section.innerHTML = '';
+    return;
+  }
+
+  const mode = state.mode;
+  section.innerHTML = `<div class="mistakes-title">✏️ 間違えた問題 (${mistakes.length}問)</div>`;
+  mistakes.forEach(r => {
+    const q = mode === 'en2ja' ? r.item.en : r.item.ja;
+    const correctAns = mode === 'en2ja' ? r.item.ja_answers[0] : r.item.en;
+    const isJaAns = mode === 'en2ja';
+    const div = document.createElement('div');
+    div.className = 'mistake-item';
+    div.innerHTML = `
+      <div class="mistake-q">${escHtml(q)}</div>
+      <div class="mistake-your">あなたの答え: ${escHtml(r.userAnswer || '（未回答）')}</div>
+      <div class="mistake-correct ${isJaAns ? 'ja-text' : ''}">正解: ${escHtml(correctAns)}</div>
+    `;
+    section.appendChild(div);
+  });
+}
+
+function getMessage(pct) {
+  if (pct === 100) return '🎉 パーフェクト！全問正解です！素晴らしい！';
+  if (pct >= 80)  return '👍 よくできました！あと少しで完璧です。';
+  if (pct >= 60)  return '📝 まあまあです。間違えた問題を復習しましょう。';
+  return '💪 もう一度チャレンジしてみましょう！繰り返し練習が大切です。';
+}
+
+function retryMistakes() {
+  const mistakes = state.results.filter(r => !r.correct);
+  state.queue = mistakes.map(r => r.item);
+  if (document.getElementById('shuffle-check').checked) {
+    state.queue = shuffle(state.queue);
+  }
+  state.currentIndex = 0;
+  state.results = [];
+  state.isAnswered = false;
+  showScreen('screen-quiz');
+  renderQuestion();
+}
+
+function retryAll() {
+  startQuiz();
+}
+
+function goToStart() {
+  showScreen('screen-start');
+}
+
+// ===== ユーティリティ =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function normalize(str) {
+  return str.normalize('NFKC').trim();
+}
+
+function normalizeEn(str) {
+  return str.normalize('NFKC')
+    .toLowerCase()
+    .replace(/['\u2019\u2018\u0060]/g, "'")
+    .trim();
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ===== 初期化 =====
+buildLessonGrid();
+</script>
+</body>
+</html>
