@@ -909,7 +909,9 @@ function showScreen(id) {
 }
 
 function normalize(str) {
-  return str.normalize('NFKC').trim();
+  return str.normalize('NFKC')
+    .replace(/[。、．，！？!?・…]/g, '')
+    .trim();
 }
 
 function normalizeEn(str) {

@@ -51,7 +51,12 @@ def build(xlsx_path: Path, out_path: Path):
             continue
 
         lesson = str(lesson_raw).strip() if lesson_raw is not None else ""
-        part = str(int(part_raw)) if part_raw is not None and str(part_raw).strip() != "" else ""
+        part = str(part_raw).strip() if part_raw is not None and str(part_raw).strip() != "" else ""
+        # 数値のPartは整数文字列に正規化（例: 1.0 → "1"）
+        try:
+            part = str(int(float(part))) if part else ""
+        except (ValueError, TypeError):
+            pass  # 文字列Partはそのまま
 
         ja_str = str(ja).strip()
         en_str = str(en).strip()
