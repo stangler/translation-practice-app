@@ -931,7 +931,7 @@ function showScreen(id) {
 
 function normalize(str) {
   return str.normalize('NFKC')
-    .replace(/[。、．，！？!?・…]/g, '')
+    .replace(/[。、．，！？!?・…]/g, '').replace(/\.{2,}/g, '')
     .trim();
 }
 
@@ -982,6 +982,15 @@ function toReading(str) {
 // 同義語グループ：グループ内のどの表記でも正解とする
 // [A, B, C, ...] → すべて相互に同義とみなす（先頭が正規形）
 const SYNONYM_GROUPS = [
+  ['英語で本を', '英語の本を'],
+  ['たびたび、よく', 'たびたび', 'よく', 'しばしば'],
+  ['ゲーム', '試合'],
+  ['読みます', '読む', '読み'],
+  ['を読む', '読む'],
+  ['見ます', '見る'],
+  ['します', 'やります'],
+  ['上手', '得意'],
+  ['ぼく', 'わたし', '私'],
   ['おじ', 'おじさん'],
   ['おば', 'おばさん'],
   ['おにいさん', 'おにい'],
@@ -1014,10 +1023,10 @@ function matchJa(userRaw, answers) {
     return ansStem.length > 0 && userStem === ansStem;
   })) return true;
 
-  // 3. 同義語正規化後に再比較（文末省略も組み合わせる）
-  const userSyn = applySynonyms(userStem);
+  // 3. 同義語正規化後に再比較（先にSYNONYM適用→stripEnding）
+  const userSyn = stripEnding(applySynonyms(userNorm));
   if (answers.some(ans => {
-    const ansSyn = applySynonyms(stripEnding(normalize(ans)));
+    const ansSyn = stripEnding(applySynonyms(normalize(ans)));
     return ansSyn.length > 0 && userSyn === ansSyn;
   })) return true;
 
