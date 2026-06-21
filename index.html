@@ -596,6 +596,89 @@ let state = {
   isAnswered: false,
 };
 
+
+// ===== AI フォールバック判定（Gemini / OpenRouter 両対応）=====
+const GEMINI_API_KEY    = '__GEMINI_API_KEY__';
+const OPENROUTER_API_KEY = '__OPENROUTER_API_KEY__';
+// OpenRouterで使うモデル（変更可）
+const GEMINI_MODEL      = '__GEMINI_MODEL__';
+const OPENROUTER_MODEL  = '__OPENROUTER_MODEL__';
+
+const AI_PROMPT = (enQuestion, correct, userRaw) =>
+  `あなたは中学英語の採点者です。以下の生徒の答えが正解と同じ意味かどうか、YES か NO だけ答えてください。
+英語の問題: ${enQuestion}
+正解の日本語訳: ${correct}
+生徒の答え: ${userRaw}
+同じ意味ですか？（YES/NO）`;
+
+async function callGemini(prompt) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 4, temperature: 0 }
+      })
+    }
+  );
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toUpperCase() ?? '';
+}
+
+async function callOpenRouter(prompt) {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 200,
+      temperature: 0,
+    })
+  });
+  const data = await res.json();
+  const msg = data?.choices?.[0]?.message;
+  // contentが配列の場合（thinking系モデル）とstring両対応
+  let text = Array.isArray(msg?.content)
+    ? (msg.content.find(b => b.type === 'text')?.text ?? '')
+    : (msg?.content ?? '');
+  // contentがnullの場合はreasoningからYES/NOを抽出
+  if (!text && msg?.reasoning) {
+    const m = msg.reasoning.match(/(YES|NO)/i);
+    text = m ? m[1] : '';
+  }
+  console.log('[AI raw]', JSON.stringify(data?.choices?.[0]));
+  return text.trim().toUpperCase();
+}
+
+// { correct: bool, byAI: bool } を返す
+async function matchJaWithAI(userRaw, answers, enQuestion) {
+  // まず既存ロジックで判定
+  if (matchJa(userRaw, answers)) return { correct: true, byAI: false };
+
+  // 使用するAPIを決定（両方あればGemini優先）
+  const useGemini     = !!GEMINI_API_KEY;
+  const useOpenRouter = !!OPENROUTER_API_KEY;
+  if (!useGemini && !useOpenRouter) return { correct: false, byAI: false };
+
+  const apiName = useGemini ? `Gemini(${GEMINI_MODEL})` : `OpenRouter(${OPENROUTER_MODEL})`;
+  const prompt = AI_PROMPT(enQuestion, answers[0], userRaw);
+  try {
+    const text = useGemini ? await callGemini(prompt) : await callOpenRouter(prompt);
+    const correct = text.startsWith('YES');
+    console.log(`[AI判定] ${apiName} → ${text} | user="${userRaw}" ans="${answers[0]}"`);
+    return { correct, byAI: correct };
+  } catch (e) {
+    console.warn('AI API error:', e);
+    return { correct: false, byAI: false };
+  }
+}
+
 // ===== kuromoji 初期化 =====
 let tokenizer = null;
 let kuromojiReady = false;
@@ -753,7 +836,7 @@ function renderQuestion() {
 }
 
 // ===== 判定 =====
-function checkAnswer() {
+async function checkAnswer() {
   if (state.isAnswered) return;
 
   const item = state.queue[state.currentIndex];
@@ -761,11 +844,18 @@ function checkAnswer() {
   const userRaw = input.value.trim();
   const mode = state.mode;
 
+  // 判定中はボタン無効化
+  const checkBtn = document.getElementById('check-btn');
+  checkBtn.disabled = true;
+  checkBtn.textContent = '判定中…';
+
   let correct = false;
 
   if (mode === 'en2ja') {
-    // 英→日：通常比較 → 文末省略 → 読みフォールバック
-    correct = matchJa(userRaw, item.ja_answers);
+    // 英→日：既存ロジック → Geminiフォールバック
+    const aiResult = await matchJaWithAI(userRaw, item.ja_answers, item.en);
+    correct = aiResult.correct;
+    if (aiResult.byAI) state.results.byAI = true;  // 一時フラグ
   } else {
     // 日→英：NFKC・小文字化・アポストロフィ正規化
     const userNorm = normalizeEn(userRaw);
@@ -773,8 +863,10 @@ function checkAnswer() {
     correct = userNorm === ansNorm;
   }
 
+  const byAI = state.results.byAI || false;
+  delete state.results.byAI;
   state.isAnswered = true;
-  state.results.push({ item, correct, userAnswer: userRaw });
+  state.results.push({ item, correct, userAnswer: userRaw, byAI });
 
   // 入力欄スタイル
   input.readOnly = true;
@@ -784,10 +876,10 @@ function checkAnswer() {
   showMark(correct);
 
   // フィードバック
-  showFeedback(item, mode, correct);
+  showFeedback(item, mode, correct, byAI);
 
   // ボタン切替
-  document.getElementById('check-btn').style.display = 'none';
+  checkBtn.style.display = 'none';
   document.getElementById('next-btn').classList.add('show');
 
   // 最終問題なら「結果を見る」
@@ -798,10 +890,21 @@ function checkAnswer() {
   }
 }
 
-function showFeedback(item, mode, correct) {
+function showFeedback(item, mode, correct, byAI = false) {
   const fb = document.getElementById('feedback');
   const fbAns = document.getElementById('feedback-answer');
   const fbAll = document.getElementById('feedback-all-answers');
+
+  // AIバッジ
+  let badge = document.getElementById('ai-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'ai-badge';
+    badge.style.cssText = 'display:inline-block;margin-left:8px;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:bold;background:#e8f4ff;color:#3a7bd5;border:1px solid #b0d0f0;vertical-align:middle;';
+    document.querySelector('.feedback-correct-label')?.appendChild(badge);
+  }
+  badge.textContent = byAI ? '🤖 AI判定' : '';
+  badge.style.display = byAI ? 'inline-block' : 'none';
 
   if (mode === 'en2ja') {
     // 正解は日本語
@@ -932,11 +1035,15 @@ function showScreen(id) {
 function normalize(str) {
   return str.normalize('NFKC')
     .replace(/[。、．，！？!?・…]/g, '').replace(/\.{2,}/g, '')
+    .replace(/\s+/g, '')
     .trim();
 }
 
 // 文末表現を除去して「幹」を返す（長い順に試す）
 const SENTENCE_ENDINGS = [
+  'ていただけますか', 'てくださいますか',
+  'ていましたか', 'ていません', 'ていました', 'ています', 'ていますか', 'ている',
+  'てください', 'ください', 'て',
   'ではありませんか', 'ではないですか',
   'ではありません', 'ではないです',
   'じゃありませんか', 'じゃないですか',
@@ -984,8 +1091,19 @@ function toReading(str) {
 const SYNONYM_GROUPS = [
   ['英語で本を', '英語の本を'],
   ['ゲーム', '試合'],
+  ['バスケット', 'バスケットボール'],
+  ['月曜', '月曜日'],
+  ['火曜', '火曜日'],
+  ['水曜', '水曜日'],
+  ['木曜', '木曜日'],
+  ['金曜', '金曜日'],
+  ['土曜', '土曜日'],
+  ['日曜', '日曜日'],
+  ['バレー', 'バレーボール'],
+  ['サッカー', 'サッカーボール'],
+  ['ラグビー', 'ラグビーボール'],
   ['読む', '読みます', '読み', 'よみます', 'よむ', 'よみ', 'を読む', 'をよむ'],
-  ['見ます', '見る'],
+  ['見ます', '見る', 'みます', 'みる', 'を見る', 'をみる'],
   ['します', 'やります'],
   ['上手', '得意'],
   ['ぼく', 'わたし', '私'],
@@ -994,6 +1112,13 @@ const SYNONYM_GROUPS = [
   ['おにいさん', 'おにい'],
   ['おねえさん', 'おねえ'],
   ['親友', 'よい友達', '良い友達', 'いい友達', '仲良し', '仲よし'],
+  // 新規追加
+  ['そうではありません', 'ちがいます', '違います', 'そうじゃありません'],
+  ['ファン', 'のファン'],
+  ['へ行', 'に行'],
+  ['の勉強をし', 'を勉強し'],
+  ['学生', '生徒'],
+  ['勉強', '学習'],
 ];
 
 // 文字列中の同義語を正規形（グループ先頭）に統一する

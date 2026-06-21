@@ -45,3 +45,9 @@ node_modules/
 check_*.py
 check_*.mjs
 .pnpm-store
+
+# 環境変数・APIキー
+.env
+
+# ビルド成果物（APIキー埋め込み済み）
+dist/
