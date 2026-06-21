@@ -983,10 +983,8 @@ function toReading(str) {
 // [A, B, C, ...] → すべて相互に同義とみなす（先頭が正規形）
 const SYNONYM_GROUPS = [
   ['英語で本を', '英語の本を'],
-  ['たびたび、よく', 'たびたび', 'よく', 'しばしば'],
   ['ゲーム', '試合'],
-  ['読みます', '読む', '読み'],
-  ['を読む', '読む'],
+  ['読む', '読みます', '読み', 'よみます', 'よむ', 'よみ', 'を読む', 'をよむ'],
   ['見ます', '見る'],
   ['します', 'やります'],
   ['上手', '得意'],
@@ -999,12 +997,15 @@ const SYNONYM_GROUPS = [
 ];
 
 // 文字列中の同義語を正規形（グループ先頭）に統一する
+// 長いメンバーから先に置換して短いメンバーが誤って置換されるのを防ぐ
 function applySynonyms(str) {
   let result = str;
   for (const group of SYNONYM_GROUPS) {
     const canonical = group[0];
-    for (let i = 1; i < group.length; i++) {
-      result = result.replaceAll(group[i], canonical);
+    // 長さの降順でソートして長いフレーズを優先
+    const members = group.slice(1).sort((a, b) => b.length - a.length);
+    for (const member of members) {
+      result = result.replaceAll(member, canonical);
     }
   }
   return result;
@@ -1024,10 +1025,21 @@ function matchJa(userRaw, answers) {
   })) return true;
 
   // 3. 同義語正規化後に再比較（先にSYNONYM適用→stripEnding）
-  const userSyn = stripEnding(applySynonyms(userNorm));
+  const prep = s => stripEnding(applySynonyms(normalize(s)));
+  const userSyn = prep(userRaw);
   if (answers.some(ans => {
-    const ansSyn = stripEnding(applySynonyms(normalize(ans)));
+    const ansSyn = prep(ans);
     return ansSyn.length > 0 && userSyn === ansSyn;
+  })) return true;
+
+  // 3b. 正解が「、」区切りの複数語義の場合、いずれか1つに一致すれば正解
+  if (answers.some(ans => {
+    const parts = ans.split('、').map(p => p.trim()).filter(p => p.length > 0);
+    if (parts.length <= 1) return false;
+    return parts.some(p => {
+      const pSyn = stripEnding(applySynonyms(normalize(p)));
+      return pSyn.length > 0 && userSyn === pSyn;
+    });
   })) return true;
 
   // 4. 読み比較フォールバック（文末除去後の幹で比較）
