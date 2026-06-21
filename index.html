@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="json/words-data.js"></script>
+<script src="https://unpkg.com/kuromoji@0.1.2/build/kuromoji.js"></script>
 <style>
 /* ===== リセット・基本 ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -518,6 +519,7 @@ body {
       </label>
     </div>
 
+    <div id="kuromoji-loading" style="text-align:center;font-size:12px;color:#aaa;margin-bottom:8px;">⏳ 辞書を読み込み中…</div>
     <button class="start-btn" id="start-btn" onclick="startQuiz()" disabled>開始</button>
   </div>
 </div>
@@ -590,9 +592,33 @@ let state = {
   selectedPart: null,
   queue: [],
   currentIndex: 0,
-  results: [],   // {item, correct, userAnswer}
+  results: [],
   isAnswered: false,
 };
+
+// ===== kuromoji 初期化 =====
+let tokenizer = null;
+let kuromojiReady = false;
+
+// 開始ボタンのdisabled状態を再評価
+function updateStartBtn() {
+  document.getElementById('start-btn').disabled =
+    (state.selectedLesson === null || !kuromojiReady);
+}
+
+kuromoji.builder({ dicPath: 'https://unpkg.com/kuromoji@0.1.2/dict' }).build((err, built) => {
+  if (!err) {
+    tokenizer = built;
+    kuromojiReady = true;
+  } else {
+    // 初期化失敗でも使えるようにする（読み比較なしで動作）
+    kuromojiReady = true;
+    console.warn('kuromoji初期化失敗:', err);
+  }
+  const loading = document.getElementById('kuromoji-loading');
+  if (loading) loading.style.display = 'none';
+  updateStartBtn();
+});
 
 // ===== 選択画面 =====
 function buildLessonGrid() {
@@ -660,10 +686,6 @@ function buildPartRow(lesson) {
 function setPartSelected(btn) {
   document.querySelectorAll('.part-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-}
-
-function updateStartBtn() {
-  document.getElementById('start-btn').disabled = (state.selectedLesson === null);
 }
 
 // ===== クイズ開始 =====
@@ -742,9 +764,8 @@ function checkAnswer() {
   let correct = false;
 
   if (mode === 'en2ja') {
-    // 英→日：NFKC正規化後、複数正解候補と比較
-    const userNorm = normalize(userRaw);
-    correct = item.ja_answers.some(ans => normalize(ans) === userNorm);
+    // 英→日：通常比較 → 文末省略 → 読みフォールバック
+    correct = matchJa(userRaw, item.ja_answers);
   } else {
     // 日→英：NFKC・小文字化・アポストロフィ正規化
     const userNorm = normalizeEn(userRaw);
@@ -912,6 +933,101 @@ function normalize(str) {
   return str.normalize('NFKC')
     .replace(/[。、．，！？!?・…]/g, '')
     .trim();
+}
+
+// 文末表現を除去して「幹」を返す（長い順に試す）
+const SENTENCE_ENDINGS = [
+  'ではありませんか', 'ではないですか',
+  'ではありません', 'ではないです',
+  'じゃありませんか', 'じゃないですか',
+  'じゃありません', 'じゃないです',
+  'でしょうか', 'ましょうか',
+  'ませんか', 'でしょう',
+  'ましょう', 'ますか',
+  'ません', 'ですね', 'ですか', 'ですよ', 'ですわ',
+  'です', 'ますよ', 'ますね', 'ます',
+  'だろう', 'だろ', 'だね', 'だよ', 'だわ', 'だっけ',
+  'である', 'だ', 'ね', 'よ', 'わ', 'な',
+];
+
+function stripEnding(str) {
+  for (const ending of SENTENCE_ENDINGS) {
+    if (str.endsWith(ending) && str.length > ending.length) {
+      return str.slice(0, str.length - ending.length);
+    }
+  }
+  return str;
+}
+
+// カタカナ→ひらがな
+function kata2hira(str) {
+  return str.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
+// kuromojiで読み（ひらがな）を取得
+function toReading(str) {
+  if (!tokenizer) return null;
+  try {
+    const tokens = tokenizer.tokenize(str);
+    return tokens.map(t => kata2hira(t.reading || t.surface_form)).join('');
+  } catch (e) {
+    return null;
+  }
+}
+
+// 英→日の正解判定
+// 1. 通常一致
+// 2. 文末除去後に前方一致（ユーザー入力 が 正解の幹 と一致）
+// 3. 読み（kuromoji）フォールバック
+// 同義語グループ：グループ内のどの表記でも正解とする
+// [A, B, C, ...] → すべて相互に同義とみなす（先頭が正規形）
+const SYNONYM_GROUPS = [
+  ['おじ', 'おじさん'],
+  ['おば', 'おばさん'],
+  ['おにいさん', 'おにい'],
+  ['おねえさん', 'おねえ'],
+  ['親友', 'よい友達', '良い友達', 'いい友達', '仲良し', '仲よし'],
+];
+
+// 文字列中の同義語を正規形（グループ先頭）に統一する
+function applySynonyms(str) {
+  let result = str;
+  for (const group of SYNONYM_GROUPS) {
+    const canonical = group[0];
+    for (let i = 1; i < group.length; i++) {
+      result = result.replaceAll(group[i], canonical);
+    }
+  }
+  return result;
+}
+
+function matchJa(userRaw, answers) {
+  const userNorm = normalize(userRaw);
+
+  // 1. 通常一致
+  if (answers.some(ans => normalize(ans) === userNorm)) return true;
+
+  // 2. 文末省略一致：両方の文末を剥がした幹同士を比較
+  const userStem = stripEnding(userNorm);
+  if (answers.some(ans => {
+    const ansStem = stripEnding(normalize(ans));
+    return ansStem.length > 0 && userStem === ansStem;
+  })) return true;
+
+  // 3. 同義語正規化後に再比較（文末省略も組み合わせる）
+  const userSyn = applySynonyms(userStem);
+  if (answers.some(ans => {
+    const ansSyn = applySynonyms(stripEnding(normalize(ans)));
+    return ansSyn.length > 0 && userSyn === ansSyn;
+  })) return true;
+
+  // 4. 読み比較フォールバック（文末除去後の幹で比較）
+  const userReading = toReading(userStem);
+  if (!userReading) return false;
+  return answers.some(ans => {
+    const ansReading = toReading(stripEnding(normalize(ans)));
+    return ansReading && ansReading === userReading;
+  });
 }
 
 function normalizeEn(str) {
