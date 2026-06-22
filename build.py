@@ -89,55 +89,51 @@ def parse_env_value(value: str) -> str:
     return value.split("#")[0].strip()
 
 
+def read_env() -> dict:
+    """
+    .env ファイルから GEMINI/OPENROUTER 関連の全キーを1ループで読み込む
+    """
+    env_path = Path(".env")
+    env_vars = {
+        "GEMINI_API_KEY": "",
+        "GEMINI_MODEL": "gemini-2.0-flash",
+        "OPENROUTER_API_KEY": "",
+        "OPENROUTER_MODEL": "google/gemini-2.0-flash-001",
+    }
+
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            for key in env_vars.keys():
+                if line.startswith(f"{key}="):
+                    env_vars[key] = parse_env_value(line.split("=", 1)[1])
+                    break
+
+    return env_vars
+
+
 def build_dist(src_html: Path = Path("index.html"), dist_dir: Path = Path("dist")):
     """
     index.html の __GEMINI_API_KEY__ を .env から読んだキーで置換して
     dist/index.html を生成する。words-data.js も dist/json/ にコピーする。
     """
-    # .env 読み込み
-    api_key = ""
-    env_path = Path(".env")
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("GEMINI_API_KEY="):
-                api_key = parse_env_value(line.split("=", 1)[1])
-                break
+    env_vars = read_env()
+    api_key = env_vars["GEMINI_API_KEY"]
+    gemini_model = env_vars["GEMINI_MODEL"]
+    openrouter_key = env_vars["OPENROUTER_API_KEY"]
+    openrouter_model = env_vars["OPENROUTER_MODEL"]
 
-
+    if not openrouter_key and not api_key:
+        print("⚠️  .env に GEMINI_API_KEY も OPENROUTER_API_KEY も見つかりません。AIフォールバックは無効になります。")
 
     # dist/ に index.html を出力
     dist_dir.mkdir(parents=True, exist_ok=True)
     content = src_html.read_text(encoding="utf-8")
-    gemini_model = "gemini-2.0-flash"  # デフォルト
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("GEMINI_MODEL="):
-                gemini_model = parse_env_value(line.split("=", 1)[1])
-                break
     content = content.replace("__GEMINI_API_KEY__", api_key)
     content = content.replace("__GEMINI_MODEL__", gemini_model)
-
-    openrouter_key = ""
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("OPENROUTER_API_KEY="):
-                openrouter_key = parse_env_value(line.split("=", 1)[1])
-                break
-    if not openrouter_key and not api_key:
-        print("⚠️  .env に GEMINI_API_KEY も OPENROUTER_API_KEY も見つかりません。AIフォールバックは無効になります。")
     content = content.replace("__OPENROUTER_API_KEY__", openrouter_key)
-
-    openrouter_model = "google/gemini-2.0-flash-001"  # デフォルト
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("OPENROUTER_MODEL="):
-                openrouter_model = parse_env_value(line.split("=", 1)[1])
-                break
     content = content.replace("__OPENROUTER_MODEL__", openrouter_model)
+    
     out_html = dist_dir / "index.html"
     out_html.write_text(content, encoding="utf-8")
 

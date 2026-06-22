@@ -652,7 +652,7 @@ async function callOpenRouter(prompt) {
     const m = msg.reasoning.match(/(YES|NO)/i);
     text = m ? m[1] : '';
   }
-  console.log('[AI raw]', JSON.stringify(data?.choices?.[0]));
+
   return text.trim().toUpperCase();
 }
 
@@ -1092,6 +1092,8 @@ const SYNONYM_GROUPS = [
   ['英語で本を', '英語の本を'],
   ['ゲーム', '試合'],
   ['バスケット', 'バスケットボール'],
+  ['愛する', 'を愛する'],
+  ['演奏', 'ひく'],
   ['月曜', '月曜日'],
   ['火曜', '火曜日'],
   ['水曜', '水曜日'],
